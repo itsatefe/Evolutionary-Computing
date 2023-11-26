@@ -191,9 +191,7 @@ class Road_Alignment:
 
     def visualize_map(self):
         plt.imshow(self.data, cmap='YlGn', interpolation='nearest')
-        cbar = plt.colorbar()
         plt.gca().invert_yaxis()
-        cbar.set_label('Roughness Level')
         plt.title('Map Roughness')
         #     plt.show()
         return plt
@@ -215,7 +213,8 @@ class Road_Alignment:
         self.initialize_population()
         average_fitness_values = []
         best_fitness_values = []
-
+        fitness_values = [self.calculate_fitness(ind) for ind in self.population]
+        fitness_std = [np.std(fitness_values)]
         last_generation = self.max_generations
         for generation in range(self.max_generations):
             fitness_values = [self.calculate_fitness(ind) for ind in self.population]
@@ -224,18 +223,19 @@ class Road_Alignment:
             num_elite = int(len(self.population) * self.elite_percentage)
             offsprings = self.generate_offspring(len(self.population) - num_elite)
             self.population = self.elitism_survival_selection(fitness_values, offsprings, num_elite)
+            fitness_std.append(np.std(fitness_values))
             if self.terminate(average_fitness_values):
-  
                 last_generation = generation
                 break
-
-        return last_generation, average_fitness_values, best_fitness_values
+                
+        
+        return last_generation, average_fitness_values, best_fitness_values,fitness_std
 
 
     def visulaize_solution(self):
         fitness_values = [self.calculate_fitness(ind) for ind in self.population]
         best_individual = self.extract_solution(self.population, fitness_values)
-        print(self.calculate_fitness(best_individual))
+        print("fitness: ",self.calculate_fitness(best_individual))
         plt = self.visualize_map()
         self.visualize_chromosome(plt, best_individual)
 
@@ -254,6 +254,19 @@ class Road_Alignment:
         plt.title('Per Generation')
         plt.legend()
         plt.show()
+        
+    def plot_diversity(self,fitness_stddev,last_generation):
+        if last_generation != self.max_generations:
+            plt.plot(range(1, last_generation + 3), fitness_stddev, linestyle='-')
+        else:
+            plt.plot(range(1, last_generation + 2), fitness_stddev, linestyle='-')
+
+            
+        plt.title('Diversity Per Generations')
+        plt.xlabel('Generation')
+        plt.ylabel('Fitness Standard Deviation')
+        plt.show()
+
         
 
 
