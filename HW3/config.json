@@ -1,0 +1,14 @@
+{
+  "evolutionary_strategy": {
+    "survival_method": "elitism",
+    "max_generations": 1000,
+    "population_size": 15,
+    "num_offspring": 200,
+    "initial_sigma": 0.75,
+    "objective_function_config": {
+      "objective_function": "schwefel_function",
+      "range": [-500, 500],
+      "chromosome_length": 5
+    }
+  }
+}
