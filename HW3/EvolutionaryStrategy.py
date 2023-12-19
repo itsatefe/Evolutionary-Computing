@@ -1,6 +1,7 @@
 import json
 from ObjectiveFunction import ObjectiveFunction
 import numpy as np
+
 class EvolutionaryStrategy:
     def __init__(self, config):
         
@@ -16,29 +17,60 @@ class EvolutionaryStrategy:
         self.chromosome_length = obj_func_config.get("chromosome_length", 5)
         self.num_offspring = es_config.get("num_offspring", 7 * 15)
         self.initial_sigma = es_config.get("initial_sigma", 0.1)
+        mutation_enable = es_config.get("mutation_enable", "True")
+        self.mutation_enable = bool(mutation_enable.lower() == "true")
+
 
     def initialize_population(self):
         min_value, max_value = self.objective_function.range_x
         object_parameters = np.random.uniform(min_value, max_value, size=(self.population_size, self.chromosome_length))
         return [list(object_parameter) + self.chromosome_length * [self.initial_sigma] for object_parameter in object_parameters]
 
-    def generate_offspring(self, population):
+    def generate_offspring_hybrid(self, population, current_num_generation):
         offsprings = []
         while len(offsprings) < self.num_offspring:
-            selected_parents_indices = np.random.choice(len(population), size=2, replace=True)
-            selected_parents = [population[i] for i in selected_parents_indices]
-            offspring = self.local_discrete_recombination(selected_parents)
+            offspring = self.hybrid_recombination(population, current_num_generation)
             object_p, strategy_p = self.uncorrelated_mutation_n_sigma(offspring[:self.chromosome_length], offspring[self.chromosome_length:])
             offspring = list(object_p) + list(strategy_p)
             offsprings.append(offspring)
         return offsprings[:self.num_offspring]
 
+    def generate_offspring(self, population, current_num_generation):
+        offsprings = []
+        while len(offsprings) < self.num_offspring:
+            selected_parents_indices = np.random.choice(len(population), size=2, replace=True)
+            selected_parents = [population[i] for i in selected_parents_indices]
+            offspring = self.local_discrete_recombination(selected_parents)
+            if self.mutation_enable:
+                object_p, strategy_p = self.uncorrelated_mutation_n_sigma(offspring[:self.chromosome_length], offspring[self.chromosome_length:])
+                offspring = list(object_p) + list(strategy_p)
+            offsprings.append(offspring)
+        return offsprings[:self.num_offspring]
+    def global_discrete_recombination(self, population):
+        offspring = np.zeros_like(population[0])
+        num_genes = len(population[0])
+        for gene in range(num_genes):
+            parent_index = np.random.randint(0, len(population))
+            offspring[gene] = population[parent_index][gene]
+        return offspring
+
     def local_discrete_recombination(self, parents):
         offspring = np.zeros_like(parents[0])
-        for i in range(len(offspring)):
+        for gene in range(len(offspring)):
             selected_parent_indices = np.random.choice(len(parents), size=1)[0]
-            offspring[i] = parents[selected_parent_indices][i]
+            offspring[gene] = parents[selected_parent_indices][gene]
         return offspring
+    
+    def hybrid_recombination(self, population, current_num_generation):
+        offspring = []
+        if current_num_generation < self.max_generations * 0.3:
+            offspring = self.global_discrete_recombination(population)
+        else:
+            selected_parents_indices = np.random.choice(len(population), size=2, replace=True)
+            selected_parents = [population[i] for i in selected_parents_indices]
+            offspring = self.local_discrete_recombination(selected_parents)
+        return offspring
+            
 
     def uncorrelated_mutation_n_sigma(self, chromosome, n_sigma, epsilon=1e-10):
         random_values = np.random.randn(len(chromosome))
@@ -85,9 +117,9 @@ class EvolutionaryStrategy:
 
     def run(self):
         population = self.initialize_population()
-        for _ in range(self.max_generations):
+        for current_num_generation in range(self.max_generations):
             new_generation = []
-            offsprings = self.generate_offspring(population)
+            offsprings = self.generate_offspring(population, current_num_generation)
             if self.survival_method == "elitism":
                 new_generation = self.elitism_survival_selection(population, offsprings)
             elif self.survival_method == "generational":
@@ -95,5 +127,13 @@ class EvolutionaryStrategy:
             population = new_generation
         min_value, min_chromosome = self.check_solution(population)
         return min_value, min_chromosome
+    
+    def calculate_convergence_speed(objective_values):
+        num_iterations = len(objective_values)
+        improvement = abs(objective_values[-1] - objective_values[0])
+        convergence_speed = improvement / num_iterations
+        return convergence_speed
+
+
 
 
