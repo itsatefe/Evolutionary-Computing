@@ -1,10 +1,10 @@
 import json
 from ObjectiveFunction import ObjectiveFunction
 import numpy as np
+import matplotlib.pyplot as plt
 
 class EvolutionaryStrategy:
     def __init__(self, config):
-        
         es_config = config.get("evolutionary_strategy", {})
         obj_func_config = es_config.get("objective_function_config", {})
         self.objective_function = ObjectiveFunction(
@@ -19,6 +19,10 @@ class EvolutionaryStrategy:
         self.initial_sigma = es_config.get("initial_sigma", 0.1)
         mutation_enable = es_config.get("mutation_enable", "True")
         self.mutation_enable = bool(mutation_enable.lower() == "true")
+        self.convergence_threshold = es_config.get("convergence_threshold", 1e-5)
+        self.no_improvement_threshold = es_config.get("no_improvement_threshold", 1e-5)
+        self.sigma_threshold = es_config.get("sigma_threshold", 1e-5)
+        
 
 
     def initialize_population(self):
@@ -46,6 +50,7 @@ class EvolutionaryStrategy:
                 offspring = list(object_p) + list(strategy_p)
             offsprings.append(offspring)
         return offsprings[:self.num_offspring]
+    
     def global_discrete_recombination(self, population):
         offspring = np.zeros_like(population[0])
         num_genes = len(population[0])
@@ -72,12 +77,12 @@ class EvolutionaryStrategy:
         return offspring
             
 
-    def uncorrelated_mutation_n_sigma(self, chromosome, n_sigma, epsilon=1e-10):
+    def uncorrelated_mutation_n_sigma(self, chromosome, n_sigma):
         random_values = np.random.randn(len(chromosome))
         tau = 1 / np.sqrt(2 * len(chromosome))
         tau_prime = 1 / np.sqrt(2 * np.sqrt(len(chromosome)))
         new_n_sigma = n_sigma * np.exp(tau_prime * np.random.randn() + tau * random_values)
-        mask = new_n_sigma < epsilon
+        mask = new_n_sigma < self.sigma_threshold
         new_n_sigma[mask] = n_sigma[mask]
         random_values = np.random.randn(len(chromosome))
         mutated_chromosome = chromosome + new_n_sigma * random_values
@@ -117,7 +122,16 @@ class EvolutionaryStrategy:
 
     def run(self):
         population = self.initialize_population()
+        average_fitness_values = []
+        best_fitness_values = []
+        fitness_std = []
+        last_generation = self.max_generations
         for current_num_generation in range(self.max_generations):
+            chromosomes = np.array(population)[:, range(0, self.chromosome_length)]
+            fitness_values = self.objective_function.evaluate_list(chromosomes)
+            best_fitness_values.append(min(fitness_values))
+            average_fitness_values.append(np.mean(fitness_values))
+            fitness_std.append(np.std(fitness_values))
             new_generation = []
             offsprings = self.generate_offspring(population, current_num_generation)
             if self.survival_method == "elitism":
@@ -125,14 +139,71 @@ class EvolutionaryStrategy:
             elif self.survival_method == "generational":
                 new_generation = self.generational_survival_selection(population, offsprings)
             population = new_generation
+            if self.terminate(average_fitness_values):
+                last_generation = current_num_generation
+                break
         min_value, min_chromosome = self.check_solution(population)
-        return min_value, min_chromosome
+            
+        return min_value, min_chromosome, last_generation, average_fitness_values, best_fitness_values, fitness_std
+    
+    def terminate(self, best_fitness_values):
+        if self.has_converged(best_fitness_values):
+            print("converged")
+            return True
+
+        if self.no_improvement(best_fitness_values):
+            return True
+
+        return False
+
+
+    def has_converged(self, best_fitness_values):
+        if len(best_fitness_values) > 1:
+            recent_changes = [np.abs(best_fitness_values[i] - best_fitness_values[i - 1]) for i in range(1, len(best_fitness_values))]
+            average_change = np.mean(recent_changes)
+            return average_change / 100 < self.convergence_threshold
+        return False
+
+    def no_improvement(self, best_fitness_values):
+        if len(best_fitness_values) > self.no_improvement_threshold:
+            recent_best_fitness = best_fitness_values[-self.no_improvement_threshold:]
+            improvement_check = all(recent_best_fitness[i] <= recent_best_fitness[i + 1] for i in range(self.no_improvement_threshold - 1))
+            return improvement_check
+        return False
+
     
     def calculate_convergence_speed(objective_values):
         num_iterations = len(objective_values)
         improvement = abs(objective_values[-1] - objective_values[0])
         convergence_speed = improvement / num_iterations
         return convergence_speed
+    
+    def plot_fitness_performance(self, last_generation, average_fitness_values, best_fitness_values):
+        plt.figure()
+        if last_generation != self.max_generations:
+            plt.plot(range(1, last_generation + 2), average_fitness_values, label='Average Fitness', color='blue')
+            plt.plot(range(1, last_generation + 2), best_fitness_values, label='best Fitness', color='green')
+        else:
+            plt.plot(range(1, last_generation + 1), average_fitness_values, label='Average Fitness', color='blue')
+            plt.plot(range(1, last_generation + 1), best_fitness_values, label='best Fitness', color='green')
+
+        plt.xlabel('Generation')
+        plt.ylabel('Fitness')
+        plt.title('Per Generation')
+        plt.legend()
+        plt.show()
+        
+    def plot_diversity(self,fitness_stddev, last_generation):
+        if last_generation != self.max_generations:
+            plt.plot(range(1, last_generation + 2), fitness_stddev, linestyle='-')
+        else:
+            plt.plot(range(1, last_generation + 1), fitness_stddev, linestyle='-')
+
+            
+        plt.title('Diversity Per Generations')
+        plt.xlabel('Generation')
+        plt.ylabel('Fitness Standard Deviation')
+        plt.show()
 
 
 
