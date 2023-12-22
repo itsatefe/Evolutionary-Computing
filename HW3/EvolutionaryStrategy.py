@@ -8,6 +8,7 @@ class EvolutionaryStrategy:
         es_config = config.get("evolutionary_strategy", {})
         obj_func_config = es_config.get("objective_function_config", {})
         mutation_func_config = es_config.get("mutation_function_config", {})
+        sigma_config = es_config.get("sigma_config", {})
         mutation_enable = mutation_func_config.get("mutation_enable", "True")
         self.mutation_enable = bool(mutation_enable.lower() == "true")
         self.mutation_probability = mutation_func_config.get("mutation_probability", 0.8)
@@ -17,24 +18,35 @@ class EvolutionaryStrategy:
             obj_func_config.get("objective_function", "schwefel_function"),
             obj_func_config.get("chromosome_length", 5),
             obj_func_config.get("range", [-500, 500]))
-       
+        
+        self.initialization_sigma_method = sigma_config.get("initialization_sigma_method","default")
+        self.random_sigma_range = sigma_config.get("random_sigma_range",[0,10])
+        self.initial_sigma = sigma_config.get("initial_sigma", 0.1)
+        self.sigma_threshold = sigma_config.get("sigma_threshold", 1e-5)
+        
         self.survival_method = es_config.get("survival_method", "elitism")
         self.max_generations = es_config.get("max_generations", 200)
         self.population_size = es_config.get("population_size", 15)
         self.chromosome_length = obj_func_config.get("chromosome_length", 5)
         self.num_offspring = es_config.get("num_offspring", 7 * 15)
-        self.initial_sigma = es_config.get("initial_sigma", 0.1)
+        
 
         self.convergence_threshold = es_config.get("convergence_threshold", 1e-5)
         self.no_improvement_threshold = es_config.get("no_improvement_threshold", 1e-5)
-        self.sigma_threshold = es_config.get("sigma_threshold", 1e-5)
-        
+
+
 
 
     def initialize_population(self):
         min_value, max_value = self.objective_function.range_x
         object_parameters = np.random.uniform(min_value, max_value, size=(self.population_size, self.chromosome_length))
-        return [list(object_parameter) + self.chromosome_length * [self.initial_sigma] for object_parameter in object_parameters]
+        strategy_parameters = []
+        if self.initialization_sigma_method == 'default':
+            strategy_parameters = self.chromosome_length * [self.initial_sigma]
+        elif self.initialization_sigma_method == 'random':
+            min_sigma, max_sigma = self.random_sigma_range
+            strategy_parameters = list(np.random.uniform(min_sigma, max_sigma, self.chromosome_length))
+        return [list(object_parameter) + strategy_parameters for object_parameter in object_parameters]
 
     def generate_offspring_hybrid(self, population, current_num_generation):
         offsprings = []
@@ -50,7 +62,10 @@ class EvolutionaryStrategy:
         while len(offsprings) < self.num_offspring:
             selected_parents_indices = np.random.choice(len(population), size=2, replace=True)
             selected_parents = [population[i] for i in selected_parents_indices]
-            offspring = self.local_discrete_recombination(selected_parents)
+            if self.objective_function.name == "schwefel_function":
+                offspring = self.local_discrete_recombination(selected_parents)
+            elif self.objective_function.name == "ackley_function":
+                offspring = self.global_discrete_recombination(population)
             if self.mutation_enable:
                 object_p, strategy_p = self.uncorrelated_mutation_n_sigma(offspring[:self.chromosome_length], offspring[self.chromosome_length:])
             else:
@@ -163,9 +178,16 @@ class EvolutionaryStrategy:
             elif self.survival_method == "generational":
                 new_generation = self.generational_survival_selection(population, offsprings)
             population = new_generation
+          
+
             if self.terminate(average_fitness_values):
                 last_generation = current_num_generation
                 break
+                
+        convergence_speed = self.calculate_convergence_speed(average_fitness_values)
+        print(f'Convergence Speed at Generation based on avg-fitness-values {current_num_generation + 1}: {convergence_speed}')
+        convergence_speed = self.calculate_convergence_speed(best_fitness_values)
+        print(f'Convergence Speed at Generation based on best-fitness-values {current_num_generation + 1}: {convergence_speed}')
         min_value, min_chromosome = self.check_solution(population)
             
         return min_value, min_chromosome, last_generation, average_fitness_values, best_fitness_values, fitness_std
@@ -216,6 +238,12 @@ class EvolutionaryStrategy:
         plt.title('Per Generation')
         plt.legend()
         plt.show()
+        
+    def calculate_convergence_speed(self, objective_values):
+        num_iterations = len(objective_values)
+        improvement = abs(objective_values[-1] - objective_values[0])
+        convergence_speed = improvement / num_iterations
+        return convergence_speed
         
     def plot_diversity(self,fitness_stddev, last_generation):
         if last_generation != self.max_generations:
