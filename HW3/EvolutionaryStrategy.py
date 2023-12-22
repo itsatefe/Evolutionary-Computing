@@ -7,18 +7,24 @@ class EvolutionaryStrategy:
     def __init__(self, config):
         es_config = config.get("evolutionary_strategy", {})
         obj_func_config = es_config.get("objective_function_config", {})
+        mutation_func_config = es_config.get("mutation_function_config", {})
+        mutation_enable = mutation_func_config.get("mutation_enable", "True")
+        self.mutation_enable = bool(mutation_enable.lower() == "true")
+        self.mutation_probability = mutation_func_config.get("mutation_probability", 0.8)
+        self.mean_log = mutation_func_config.get("mean_log", 0.6)
+        self.sigma_log = mutation_func_config.get("sigma_log", 0.4)
         self.objective_function = ObjectiveFunction(
             obj_func_config.get("objective_function", "schwefel_function"),
             obj_func_config.get("chromosome_length", 5),
             obj_func_config.get("range", [-500, 500]))
+       
         self.survival_method = es_config.get("survival_method", "elitism")
         self.max_generations = es_config.get("max_generations", 200)
         self.population_size = es_config.get("population_size", 15)
         self.chromosome_length = obj_func_config.get("chromosome_length", 5)
         self.num_offspring = es_config.get("num_offspring", 7 * 15)
         self.initial_sigma = es_config.get("initial_sigma", 0.1)
-        mutation_enable = es_config.get("mutation_enable", "True")
-        self.mutation_enable = bool(mutation_enable.lower() == "true")
+
         self.convergence_threshold = es_config.get("convergence_threshold", 1e-5)
         self.no_improvement_threshold = es_config.get("no_improvement_threshold", 1e-5)
         self.sigma_threshold = es_config.get("sigma_threshold", 1e-5)
@@ -47,10 +53,26 @@ class EvolutionaryStrategy:
             offspring = self.local_discrete_recombination(selected_parents)
             if self.mutation_enable:
                 object_p, strategy_p = self.uncorrelated_mutation_n_sigma(offspring[:self.chromosome_length], offspring[self.chromosome_length:])
-                offspring = list(object_p) + list(strategy_p)
+            else:
+                object_p = self.non_adaptive_mutation(offspring[:self.chromosome_length])
+                #However, strategy parameters are not going to be used, since adaptive mutation is disabled.
+                strategy_p = offspring[self.chromosome_length:]
+                
+            offspring = list(object_p) + list(strategy_p)
             offsprings.append(offspring)
         return offsprings[:self.num_offspring]
     
+    # The larger the mean_log, the more the distribution is shifted towards larger changes.
+    # A larger sigma_log will increase the variability, allowing for a wider range of changes.
+    # creep_mutation
+    def non_adaptive_mutation(self, chromosome):
+        mutated_chromosome = chromosome.copy()
+        for i in range(len(chromosome)):
+            if np.random.rand() < self.mutation_probability:
+                mutation_value = np.random.lognormal(self.mean_log, self.sigma_log)
+                mutated_chromosome[i] += mutation_value
+        return mutated_chromosome
+        
     def global_discrete_recombination(self, population):
         offspring = np.zeros_like(population[0])
         num_genes = len(population[0])
@@ -86,16 +108,18 @@ class EvolutionaryStrategy:
         new_n_sigma[mask] = n_sigma[mask]
         random_values = np.random.randn(len(chromosome))
         mutated_chromosome = chromosome + new_n_sigma * random_values
+        mutated_chromosome = self._check_boundaries(mutated_chromosome)
+        return mutated_chromosome, new_n_sigma
+    
+    def _check_boundaries(self, mutated_chromosome):
         min_value, max_value = self.objective_function.range_x
-        
         for i in range(len(mutated_chromosome)):
             if mutated_chromosome[i] < min_value:
                 mutated_chromosome[i] = min_value
             elif mutated_chromosome[i] > max_value:
                 mutated_chromosome[i] = max_value
-                
-        return mutated_chromosome, new_n_sigma
-
+        return mutated_chromosome
+    
     def elitism_survival_selection(self, parents, offsprings):
         combined_population = np.vstack((parents, offsprings))
         fitness_values = self.objective_function.evaluate_list(combined_population[:, :self.chromosome_length])

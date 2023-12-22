@@ -1,0 +1,24 @@
+{
+  "evolutionary_strategy": {
+    "survival_method": "elitism",
+    "max_generations": 1000,
+    "population_size": 30,
+    "num_offspring": 200,
+    "initial_sigma": 0.75,
+    "mutation_function_config": {
+      "mutation_enable": "True",
+      "mutation_probability": 0.8,
+      "mean_log": 0.6,
+      "sigma_log": 0.4
+    },
+    
+    "convergence_threshold": 1e-5,
+    "no_improvement_threshold": 200,
+    "sigma_threshold": 1e-5,
+    "objective_function_config": {
+      "objective_function": "ackley_function",
+      "range": [-32.768,32.768],
+      "chromosome_length": 2
+    }
+  }
+}
