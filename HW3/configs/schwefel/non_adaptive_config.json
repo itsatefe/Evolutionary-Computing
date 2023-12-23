@@ -1,8 +1,8 @@
 {
   "evolutionary_strategy": {
     "survival_method": "elitism",
-    "max_generations": 1000,
-    "population_size": 40,
+    "max_generations": 100,
+    "population_size": 50,
     "num_offspring": 300,
  
     "mutation_function_config": {

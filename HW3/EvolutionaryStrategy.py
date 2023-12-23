@@ -2,6 +2,7 @@ import json
 from ObjectiveFunction import ObjectiveFunction
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 
 class EvolutionaryStrategy:
     def __init__(self, config):
@@ -30,10 +31,10 @@ class EvolutionaryStrategy:
         self.chromosome_length = obj_func_config.get("chromosome_length", 5)
         self.num_offspring = es_config.get("num_offspring", 7 * 15)
         
-
         self.convergence_threshold = es_config.get("convergence_threshold", 1e-5)
         self.no_improvement_threshold = es_config.get("no_improvement_threshold", 1e-5)
-
+        self.strategy_parameters = None
+        
 
 
 
@@ -46,6 +47,7 @@ class EvolutionaryStrategy:
         elif self.initialization_sigma_method == 'random':
             min_sigma, max_sigma = self.random_sigma_range
             strategy_parameters = list(np.random.uniform(min_sigma, max_sigma, self.chromosome_length))
+            self.strategy_parameters = strategy_parameters
         return [list(object_parameter) + strategy_parameters for object_parameter in object_parameters]
 
     def generate_offspring_hybrid(self, population, current_num_generation):
@@ -65,13 +67,13 @@ class EvolutionaryStrategy:
             if self.objective_function.name == "schwefel_function":
                 offspring = self.local_discrete_recombination(selected_parents)
             elif self.objective_function.name == "ackley_function":
+#                 offspring = self.local_discrete_recombination(selected_parents)
                 offspring = self.global_discrete_recombination(population)
             if self.mutation_enable:
                 object_p, strategy_p = self.uncorrelated_mutation_n_sigma(offspring[:self.chromosome_length], offspring[self.chromosome_length:])
             else:
-                object_p = self.non_adaptive_mutation(offspring[:self.chromosome_length])
-                #However, strategy parameters are not going to be used, since adaptive mutation is disabled.
-                strategy_p = offspring[self.chromosome_length:]
+                object_p = self.non_adaptive_mutation_n_sigma(offspring[:self.chromosome_length])
+                strategy_p = self.strategy_parameters
                 
             offspring = list(object_p) + list(strategy_p)
             offsprings.append(offspring)
@@ -80,7 +82,7 @@ class EvolutionaryStrategy:
     # The larger the mean_log, the more the distribution is shifted towards larger changes.
     # A larger sigma_log will increase the variability, allowing for a wider range of changes.
     # creep_mutation
-    def non_adaptive_mutation(self, chromosome):
+    def non_adaptive_mutation_creep(self, chromosome):
         mutated_chromosome = chromosome.copy()
         for i in range(len(chromosome)):
             if np.random.rand() < self.mutation_probability:
@@ -88,6 +90,13 @@ class EvolutionaryStrategy:
                 mutated_chromosome[i] += mutation_value
         return mutated_chromosome
         
+        
+    def non_adaptive_mutation_n_sigma(self, chromosome):
+        random_values = np.random.randn(len(chromosome))
+        mutated_chromosome = chromosome + self.strategy_parameters * random_values
+        mutated_chromosome = self._check_boundaries(mutated_chromosome)
+        return mutated_chromosome
+    
     def global_discrete_recombination(self, population):
         offspring = np.zeros_like(population[0])
         num_genes = len(population[0])
@@ -161,9 +170,11 @@ class EvolutionaryStrategy:
 
     def run(self):
         population = self.initialize_population()
+        
         average_fitness_values = []
         best_fitness_values = []
         fitness_std = []
+        convergence_speeds = []
         last_generation = self.max_generations
         for current_num_generation in range(self.max_generations):
             chromosomes = np.array(population)[:, range(0, self.chromosome_length)]
@@ -179,18 +190,16 @@ class EvolutionaryStrategy:
                 new_generation = self.generational_survival_selection(population, offsprings)
             population = new_generation
           
-
+            if len(best_fitness_values) > 1:
+                convergence_speed = np.abs(best_fitness_values[-1] - best_fitness_values[-2])
+                convergence_speeds.append(convergence_speed)
+                
             if self.terminate(average_fitness_values):
                 last_generation = current_num_generation
                 break
-                
-        convergence_speed = self.calculate_convergence_speed(average_fitness_values)
-        print(f'Convergence Speed at Generation based on avg-fitness-values {current_num_generation + 1}: {convergence_speed}')
-        convergence_speed = self.calculate_convergence_speed(best_fitness_values)
-        print(f'Convergence Speed at Generation based on best-fitness-values {current_num_generation + 1}: {convergence_speed}')
+          
         min_value, min_chromosome = self.check_solution(population)
-            
-        return min_value, min_chromosome, last_generation, average_fitness_values, best_fitness_values, fitness_std
+        return min_value, min_chromosome, last_generation, convergence_speeds, average_fitness_values, best_fitness_values, fitness_std
     
     def terminate(self, best_fitness_values):
         if self.has_converged(best_fitness_values):
@@ -224,6 +233,17 @@ class EvolutionaryStrategy:
         convergence_speed = improvement / num_iterations
         return convergence_speed
     
+    def plot_convergance_speed(self, last_generation, convergence_speeds):
+        if last_generation != self.max_generations:
+            plt.plot(range(1, last_generation + 1), convergence_speeds, label='Convergence Speed', color='blue')
+        else:
+            plt.plot(range(1, last_generation), convergence_speeds, label='Convergence Speed', color='blue')
+        plt.xlabel('Generation')
+        plt.ylabel('Convergence Speed')
+        plt.title('Convergence Speed Per Generation')
+        plt.legend()
+        plt.show()
+        
     def plot_fitness_performance(self, last_generation, average_fitness_values, best_fitness_values):
         plt.figure()
         if last_generation != self.max_generations:
@@ -232,29 +252,57 @@ class EvolutionaryStrategy:
         else:
             plt.plot(range(1, last_generation + 1), average_fitness_values, label='Average Fitness', color='blue')
             plt.plot(range(1, last_generation + 1), best_fitness_values, label='best Fitness', color='green')
-
+            
         plt.xlabel('Generation')
         plt.ylabel('Fitness')
         plt.title('Per Generation')
         plt.legend()
         plt.show()
         
-    def calculate_convergence_speed(self, objective_values):
-        num_iterations = len(objective_values)
-        improvement = abs(objective_values[-1] - objective_values[0])
-        convergence_speed = improvement / num_iterations
-        return convergence_speed
-        
-    def plot_diversity(self,fitness_stddev, last_generation):
+             
+    def plot_diversity(self, last_generation, fitness_std):
         if last_generation != self.max_generations:
-            plt.plot(range(1, last_generation + 2), fitness_stddev, linestyle='-')
+            plt.plot(range(1, last_generation + 2), fitness_std, linestyle='-')
         else:
-            plt.plot(range(1, last_generation + 1), fitness_stddev, linestyle='-')
-
+            plt.plot(range(1, last_generation + 1), fitness_std, linestyle='-')
             
         plt.title('Diversity Per Generations')
         plt.xlabel('Generation')
         plt.ylabel('Fitness Standard Deviation')
+        plt.show()
+        
+        
+        
+    def plot_evolution(self, last_generation, convergence_speeds, average_fitness_values, best_fitness_values, fitness_std):
+
+        plt.figure(figsize=(10, 6))
+
+        # Plot Convergence Speed
+        if last_generation != self.max_generations:
+            plt.plot(range(1, last_generation + 1), convergence_speeds, label='Convergence Speed', color='blue')
+        else:
+            plt.plot(range(1, last_generation), convergence_speeds, label='Convergence Speed', color='blue')
+
+        # Plot Fitness Performance
+        if last_generation != self.max_generations:
+            plt.plot(range(1, last_generation + 2), average_fitness_values, label='Average Fitness', color='orange')
+            plt.plot(range(1, last_generation + 2), best_fitness_values, label='Best Fitness', color='green')
+        else:
+            plt.plot(range(1, last_generation + 1), average_fitness_values, label='Average Fitness', color='orange')
+            plt.plot(range(1, last_generation + 1), best_fitness_values, label='Best Fitness', color='green')
+
+        # Plot Diversity
+        if last_generation != self.max_generations:
+            plt.plot(range(1, last_generation + 2), fitness_std, linestyle='-', label='Diversity', color='red')
+        else:
+            plt.plot(range(1, last_generation + 1), fitness_std, linestyle='-', label='Diversity', color='red')
+
+        plt.xlabel('Generation')
+        plt.ylabel('Values')
+        plt.title('Evolutionary Performance Over Generations')
+        plt.legend()
+
+        plt.tight_layout()
         plt.show()
 
 
