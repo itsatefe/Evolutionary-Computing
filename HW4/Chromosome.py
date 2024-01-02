@@ -1,5 +1,6 @@
 
 import numpy as np
+from collections import Counter
 
 class Chromosome:
     def __init__(self, values, objectives=None):
@@ -54,7 +55,6 @@ def fast_non_dominated_sort(population):
 
         i += 1
         fronts.append(next_front)
-
     return fronts
 
 
