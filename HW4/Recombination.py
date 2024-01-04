@@ -3,9 +3,10 @@ import numpy as np
 
 
 class Recombination:
-    def __init__(self, parent1, parent2):
+    def __init__(self, parent1, parent2, crossover_probability=0.9):
         self.parent1 = parent1
         self.parent2 = parent2
+        self.crossover_probability = crossover_probability
         self.crossovers = [self.onepoint_crossover, self.twopoint_crossover, self.uniform_crossover, self.shuffle_crossover, self.reduced_surrogate_crossover]
         
     def onepoint_crossover(self):
@@ -64,6 +65,8 @@ class Recombination:
 
     
     def execute_crossover(self, crossover):
+        if np.random.rand() > self.crossover_probability:
+            return self.parent1, self.parent2
         return crossover()
 
 
