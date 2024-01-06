@@ -18,7 +18,7 @@ import multiprocessing
 import logging
 
 class NSGAII:
-    def __init__(self,X,y, population_size, LP, num_features, true_pareto_front,selected_features, maxFEs, sigma=0.0001):
+    def __init__(self,X,y, population_size, LP, num_features, true_pareto_front,selected_features, maxFEs, no_improvement_limit,igd_threshold, hv_threshold, sigma=0.0001):
         self.population_size = population_size
         self.LP = LP
         self.mutation_probability= 1 / num_features
@@ -36,6 +36,9 @@ class NSGAII:
         self.y = y
         self.true_pareto_front = true_pareto_front
         self.selected_features = selected_features
+        self.no_improvement_limit = no_improvement_limit
+        self.igd_threshold = igd_threshold
+        self.hv_threshold = hv_threshold
         
     def random_initialize_population(self):
         population = []
@@ -259,7 +262,6 @@ class NSGAII:
             concurrent.futures.wait(futures)
             return [future.result() for future in futures if future.result() is not None]
        
-
     def nsga2(self):
         count_evaluation = 0
         k = 0
@@ -267,13 +269,13 @@ class NSGAII:
         crossover_probability = self.init_OSP()
         hypervolume_values = []
         igd_values = []
+        no_improvement_count = 0
         while count_evaluation < self.maxFEs:
             self.default_value = 0
             self.nReward = {key: self.default_value for key in self.crossover_keys}
             self.nPenalty = {key: self.default_value for key in self.crossover_keys}
             new_population = []
             
-#             start_time = time.time()
             current_families = []
             for _ in range(self.population_size // 2):
                
@@ -286,7 +288,6 @@ class NSGAII:
                 
                 offspring1, offspring2 = self.avoid_zero_offspring(offspring1, offspring2)
                 offspring1, offspring2 = Chromosome(offspring1), Chromosome(offspring2)
-                # offsprings = self.calculate_fitness_parallel([offspring1, offspring2])
                 current_families.append([[offspring1, offspring2],[parent1, parent2],crossover])
                 new_population += [offspring1, offspring2]
               
@@ -297,10 +298,6 @@ class NSGAII:
             for i, family_offsprings in enumerate(offsprings):
                 current_families[i][0] = family_offsprings
                 self.credit_assignment(current_families[i][1], family_offsprings, current_families[i][2])
-
-#             end_time = time.time()
-#             elapsed_time = end_time - start_time
-#             print("new_pop time: ", elapsed_time)
 
             k += 1
             self.RD.append(self.nReward)
@@ -323,13 +320,7 @@ class NSGAII:
                 
             
 
-#             start_time = time.time()
             population, current_solutions = self.environmental_selection_parallel(distinct_objects)
-#             current_solutions = self.find_non_dominated_solution(population)
-#             end_time = time.time()
-#             elapsed_time = end_time - start_time
-#             print("environmental time: ", elapsed_time)
-            
             hypervolume = self.calculate_hypervolume(current_solutions)
             hypervolume_values.append(hypervolume)
             igd = self.calculate_igd(current_solutions)
@@ -337,9 +328,19 @@ class NSGAII:
             
             if count_evaluation % 25000 == 0:
                 print(f"Evaluations: {count_evaluation}, HV: {hypervolume}, IGD: {igd}")
+            
+            if count_evaluation >= 200:
+                igd_difference = abs(igd_values[-2] - igd_values[-1])
+                hv_difference = abs(hypervolume_values[-2] - hypervolume_values[-1])
+                if igd_difference < self.igd_threshold and hv_difference < self.hv_threshold:
+                    no_improvement_count += 1
+                else:
+                    no_improvement_count = 0
 
+            if no_improvement_count >= self.no_improvement_limit:
+                print(f"No improvement in the last {self.no_improvement_limit} generations. Stopping the algorithm.")
+                break
 
-       
         return current_solutions, igd_values, hypervolume_values
     
     def avoid_zero_offspring(self, offspring1, offspring2):
