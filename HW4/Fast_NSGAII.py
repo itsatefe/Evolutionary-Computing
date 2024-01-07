@@ -39,6 +39,7 @@ class NSGAII:
         self.no_improvement_limit = no_improvement_limit
         self.igd_threshold = igd_threshold
         self.hv_threshold = hv_threshold
+        self.max_feature_size = int(max(np.array(self.true_pareto_front)[:,1]))
         
     def random_initialize_population(self):
         population = []
@@ -59,7 +60,19 @@ class NSGAII:
             chromosome.objectives = [f(values) for f in self.objective_functions]
             population.append(chromosome)
         return population
-
+    
+    def wise_initialize_population2(self):
+        population = []
+        number_pool = list(range(1, self.num_features))
+        for _ in range(self.population_size):
+            solution = np.random.choice(number_pool, size=random.randint(1, self.max_feature_size +1) , replace=False)
+            values = np.zeros(self.num_features)
+            values[solution] = 1
+            chromosome = Chromosome(list(values))
+            chromosome.objectives = [f(values) for f in self.objective_functions]
+            population.append(chromosome)
+        return population
+    
     def environmental_selection(self, population):
         remaining_pop_size = self.population_size
         new_population = []
@@ -265,7 +278,7 @@ class NSGAII:
     def nsga2(self):
         count_evaluation = 0
         k = 0
-        population = self.wise_initialize_population()
+        population = self.wise_initialize_population2()
         crossover_probability = self.init_OSP()
         hypervolume_values = []
         igd_values = []
@@ -326,7 +339,7 @@ class NSGAII:
             igd = self.calculate_igd(current_solutions)
             igd_values.append(igd)
             
-            if count_evaluation % 25000 == 0:
+            if count_evaluation % 2500 == 0:
                 print(f"Evaluations: {count_evaluation}, HV: {hypervolume}, IGD: {igd}")
             
             if count_evaluation >= 200:
@@ -338,6 +351,8 @@ class NSGAII:
                     no_improvement_count = 0
 
             if no_improvement_count >= self.no_improvement_limit:
+                if self.maxFEs < 2500 or count_evaluation % 2500 != 0:
+                    print(f"Evaluations: {count_evaluation}, HV: {hypervolume}, IGD: {igd}")
                 print(f"No improvement in the last {self.no_improvement_limit} generations. Stopping the algorithm.")
                 break
 

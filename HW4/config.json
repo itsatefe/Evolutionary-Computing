@@ -4,9 +4,9 @@
       "population_size": 100,
       "Q": 5,
       "LP": 5,
-      "igd_threshold": 0.01,
+      "igd_threshold": 0.005,
       "hv_threshold": 0.1,
-      "no_improvement_limit": 10,
+      "no_improvement_limit": 30,
       "maxFEs": 10000
     },
     "DS04.csv": {
@@ -14,9 +14,9 @@
       "population_size": 100,
       "Q": 5,
       "LP": 5,
-      "igd_threshold": 0.01,
+      "igd_threshold": 0.05,
       "hv_threshold": 0.1,
-      "no_improvement_limit": 10,
+      "no_improvement_limit": 30,
       "maxFEs": 20000
     },
     "DS05.csv": {
@@ -26,7 +26,7 @@
       "LP": 5,
       "igd_threshold": 0.1,
       "hv_threshold": 1,
-      "no_improvement_limit": 10,
+      "no_improvement_limit": 30,
       "maxFEs": 30000
     },
     "DS07.csv": {
@@ -34,10 +34,10 @@
       "population_size": 100,
       "Q": 5,
       "LP": 5,
-      "igd_threshold": 1,
-      "hv_threshold": 10,
-      "no_improvement_limit": 10,
-      "maxFEs": 40000
+      "igd_threshold": 0.1,
+      "hv_threshold": 5,
+      "no_improvement_limit": 30,
+      "maxFEs": 30000
     },
     "DS08.csv": {
       "num_objectives": 2,
@@ -46,7 +46,7 @@
       "LP": 5,
       "igd_threshold": 1,
       "hv_threshold": 10,
-      "no_improvement_limit": 10,
+      "no_improvement_limit": 40,
       "maxFEs": 50000
     },
     "DS10.csv": {
@@ -56,7 +56,7 @@
       "LP": 5,
       "igd_threshold": 1,
       "hv_threshold": 10,
-      "no_improvement_limit": 10,
+      "no_improvement_limit": 50,
       "maxFEs": 100000
     }
   
