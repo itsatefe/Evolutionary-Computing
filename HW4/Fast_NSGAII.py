@@ -41,6 +41,27 @@ class NSGAII:
         self.hv_threshold = hv_threshold
         self.max_feature_size = int(max(np.array(self.true_pareto_front)[:,1]))
         
+
+    def wise_random_initialize_population(self):
+        population = []
+        for i in range(self.population_size):
+            num_active_features = np.random.randint(1, self.num_features + 1)
+            values = np.zeros(self.num_features, dtype=int)
+            active_indices = np.random.choice(self.num_features, num_active_features, replace=False)
+            values[active_indices] = 1
+            chromosome = Chromosome(list(values))
+            chromosome.objectives = [f(values) for f in self.objective_functions]
+            population.append(chromosome)
+            
+        all_features = np.sum([chromosome.values for chromosome in population], axis=0)
+        
+        missing_features = np.where(all_features == 0)[0]
+        for feature in missing_features:
+            random_chromosome = np.random.choice(population)
+            random_chromosome.values[feature] = 1
+            
+        return population
+
     def random_initialize_population(self):
         population = []
         for _ in range(self.population_size):
@@ -50,6 +71,7 @@ class NSGAII:
             population.append(chromosome)
         return population
 
+    # random forest feature importance
     def wise_initialize_population(self):
         population = []
         for _ in range(self.population_size):
@@ -97,7 +119,6 @@ class NSGAII:
         for p in population:
             p.domination_count = 0
             p.dominated_solutions = set()
-
             for q in population:
                 if p.dominate(q):
                     p.dominated_solutions.add(q)
@@ -278,7 +299,7 @@ class NSGAII:
     def nsga2(self):
         count_evaluation = 0
         k = 0
-        population = self.wise_initialize_population2()
+        population = self.wise_random_initialize_population()
         crossover_probability = self.init_OSP()
         hypervolume_values = []
         igd_values = []

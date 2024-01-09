@@ -35,28 +35,28 @@
       "Q": 5,
       "LP": 5,
       "igd_threshold": 0.1,
-      "hv_threshold": 5,
-      "no_improvement_limit": 30,
-      "maxFEs": 30000
+      "hv_threshold": 0.5,
+      "no_improvement_limit": 40,
+      "maxFEs": 40000
     },
     "DS08.csv": {
       "num_objectives": 2,
       "population_size": 100,
       "Q": 5,
       "LP": 5,
-      "igd_threshold": 1,
-      "hv_threshold": 10,
-      "no_improvement_limit": 40,
-      "maxFEs": 50000
+      "igd_threshold": 0.5,
+      "hv_threshold": 3,
+      "no_improvement_limit": 70,
+      "maxFEs": 40000
     },
     "DS10.csv": {
       "num_objectives": 2,
       "population_size": 100,
       "Q": 5,
       "LP": 5,
-      "igd_threshold": 1,
-      "hv_threshold": 10,
-      "no_improvement_limit": 50,
+      "igd_threshold": 0.05,
+      "hv_threshold": 0.25,
+      "no_improvement_limit": 70,
       "maxFEs": 100000
     }
   
