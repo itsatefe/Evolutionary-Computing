@@ -5,3 +5,5 @@ HW2 -> Road Alignment with GA (Finding best path from left to the right side of 
 HW3 -> Schwefel and Ackley Function Optimization with Modern Evolutionary Strategy
 
 HW4 -> Feature Selection with NSGAII and Adaptive Crossover Selection
+
+HW5 ->
