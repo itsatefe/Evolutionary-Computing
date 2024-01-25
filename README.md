@@ -4,6 +4,6 @@ HW2 -> Road Alignment with GA (Finding best path from left to the right side of 
 
 HW3 -> Schwefel and Ackley Function Optimization with Modern Evolutionary Strategy
 
-HW4 -> Feature Selection with NSGAII and Adaptive Crossover Selection
+HW4 -> Feature Selection with NSGAII and Adaptive Crossover Selection (parent selection is not correctly implemented, it should be binary tournament selection based on lesser rank or in the same rank situations based on lesser crowded region (higher crowding distance))
 
 HW5 ->
