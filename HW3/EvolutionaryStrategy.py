@@ -36,8 +36,6 @@ class EvolutionaryStrategy:
         self.strategy_parameters = None
         
 
-
-
     def initialize_population(self):
         min_value, max_value = self.objective_function.range_x
         object_parameters = np.random.uniform(min_value, max_value, size=(self.population_size, self.chromosome_length))
@@ -47,7 +45,7 @@ class EvolutionaryStrategy:
         elif self.initialization_sigma_method == 'random':
             min_sigma, max_sigma = self.random_sigma_range
             strategy_parameters = list(np.random.uniform(min_sigma, max_sigma, self.chromosome_length))
-            self.strategy_parameters = strategy_parameters
+        self.strategy_parameters = strategy_parameters
         return [list(object_parameter) + strategy_parameters for object_parameter in object_parameters]
 
     def generate_offspring_hybrid(self, population, current_num_generation):
