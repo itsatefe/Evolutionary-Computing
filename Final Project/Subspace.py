@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 import numpy as np
 
 class Subspace:
@@ -18,13 +12,14 @@ class Subspace:
         return z_scp
 
     def calculate_sdv(self, epsilon=1e-6):
-        sdv = 1.0 / (self.coordinates + epsilon)
+        coordinates_array = np.array(self.coordinates)
+        sdv = 1.0 / (coordinates_array + epsilon)
         return sdv
 
     def calculate_sws(self, x, epsilon=1e-6):
         sdv = self.calculate_sdv(epsilon)
         z_scp = self.calculate_scp()
-        sws_value = np.sum(sdv * (x - z_scp))
+        sws_value = np.sum(sdv * (x.objectives - z_scp))
         return sws_value
 
     def subspace_dominance(self, other):
