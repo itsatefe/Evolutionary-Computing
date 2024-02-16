@@ -4,6 +4,7 @@ import itertools
 from Recombination import Recombination
 from Chromosome import Chromosome
 from Subspace import Subspace
+
 class AGMOEA:
     def __init__(self, NP, K, NGBA, NEXA, Tmax, FETmax, evaluator, crossover_parameters, N, M):
         self.NP = NP # number of population
@@ -27,22 +28,29 @@ class AGMOEA:
         self.FET = 0
         self.FETmax = FETmax
         self.crossover_parameters = crossover_parameters
-
+        self.lower_bounds, self.upper_bounds = self.evaluator.get_bounds()
+        self.Test = []
+        self.S_EXA = set()
+        self.ideal_point = evaluator.ideal_point()
+        self.nadir_point = evaluator.nadir_point()
+        
+    def set_bounds(self):
+        return self.evaluator.get_bounds()
+    
     def initialize_population(self):
         population = []
         for i in range(self.NP):
-            decision_variables = np.random.rand(self.N)
+            decision_variables = np.array([np.random.uniform(low, high) for low, high in zip(self.lower_bounds,self.upper_bounds)])
             chromosome = Chromosome(decision_variables)
             chromosome.objectives = self.evaluate_individual(chromosome)
             population.append(chromosome)
         return population
 
-    def construct_subspaces(self, solutions, ideal_point, nadir_point):
-        grid_intervals = (np.array(nadir_point) - np.array(ideal_point)) / self.K
-        self.GBA = {tuple(i): Subspace(coordinates=i, ideal_point=ideal_point, grid_intervals=grid_intervals) for i in self.generate_grid_coordinates()}
+    def construct_subspaces(self, solutions):
+        grid_intervals = (np.array(self.nadir_point) - np.array(self.ideal_point)) / self.K
+        self.GBA = {tuple(i): Subspace(coordinates=i, ideal_point=self.ideal_point, grid_intervals=grid_intervals) for i in self.generate_grid_coordinates()}
         for solution in solutions:
-            relative_position = np.array(solution.objectives) - np.array(ideal_point)
-            print(grid_intervals)
+            relative_position = np.array(solution.objectives) - np.array(self.ideal_point)
             grid_coordinates = np.floor(relative_position / grid_intervals).astype(int)
             grid_coordinates = np.clip(grid_coordinates, 0, self.K - 1)
             self.GBA[tuple(grid_coordinates)].solutions.append(solution)
@@ -53,12 +61,12 @@ class AGMOEA:
         all_combinations = list(itertools.product(*coordinate_ranges))
         return all_combinations
 
-    def polynomial_mutation_chromosome(self, chromosome, mutation_rate=0.1, eta_m=20, lower_bound=0, upper_bound=1):
+    def polynomial_mutation_chromosome(self, chromosome, mutation_rate=0.1, eta_m=20):
         for i in range(len(chromosome)):
             if random.random() < mutation_rate:
                 gene = chromosome[i]
-                delta_1 = (gene - lower_bound) / (upper_bound - lower_bound)
-                delta_2 = (upper_bound - gene) / (upper_bound - lower_bound)
+                delta_1 = (gene - self.lower_bounds[i]) / (self.upper_bounds[i] - self.lower_bounds[i])
+                delta_2 = (self.upper_bounds[i] - gene) / (self.upper_bounds[i] - self.lower_bounds[i])
                 rand = random.random()
                 mut_pow = 1.0 / (eta_m + 1.0)
                 if rand < 0.5:
@@ -69,22 +77,34 @@ class AGMOEA:
                     xy = 1.0 - delta_2
                     val = 2.0 * (1.0 - rand) + 2.0 * (rand - 0.5) * (xy ** (eta_m + 1))
                     delta_q = 1.0 - val ** mut_pow
-                gene = gene + delta_q * (upper_bound - lower_bound)
-                chromosome[i] = min(max(gene, lower_bound), upper_bound)
+                gene = gene + delta_q * (self.upper_bounds[i] - self.lower_bounds[i])
+                chromosome[i] = min(max(gene, self.lower_bounds[i]), self.upper_bounds[i])
         return chromosome
 
     
     def improve_EXA(self):
-        ideal_point = [min(chromosome.objectives[i] for chromosome in self.EXA) for i in range(self.M)]
-        nadir_point = [max(chromosome.objectives[i] for chromosome in self.EXA) for i in range(self.M)]
-        grid_intervals = (np.array(nadir_point) - np.array(ideal_point)) / self.K
-        self.GEXA = {tuple(i): Subspace(coordinates=i, ideal_point=ideal_point, grid_intervals=grid_intervals) for i in self.generate_grid_coordinates()}
+        grid_intervals = (np.array(self.nadir_point) - np.array(self.ideal_point)) / self.K
+        self.GEXA = {tuple(i): Subspace(coordinates=i, ideal_point=self.ideal_point, grid_intervals=grid_intervals) for i in self.generate_grid_coordinates()}
         for solution in self.EXA:
-            relative_position = solution.objectives - ideal_point
+            relative_position = solution.objectives - self.ideal_point
             grid_coordinates = np.floor(relative_position / grid_intervals).astype(int)
             grid_coordinates = np.clip(grid_coordinates, 0, self.K - 1)
             self.GEXA[tuple(grid_coordinates)].solutions.append(solution)
+    
+    
+    def select_subspace_EXA(self):
+        epsilon = 1e-6
+        G_minus_S = [subspace for subspace in self.GEXA if subspace not in self.S_EXA]
+        probabilities = {k: (1 / (self.SR(self.GEXA[k]) + epsilon)) for k in G_minus_S}
+        total = sum(probabilities.values())
+        normalized_probabilities = {k: (v / total) for k, v in probabilities.items()}
+        selected_subspace = random.choices(list(normalized_probabilities.keys()), weights=normalized_probabilities.values(), k=1)[0]
+        for subspace in self.GEXA.values():
+            if selected_subspace.strong_subspace_dominance(subspace):
+                self.S_EXA.add(subspace)
+        return self.GEXA[selected_subspace]
 
+    
     def SR(self, subspace):
         return sum(subspace.coordinates)
 
@@ -99,6 +119,7 @@ class AGMOEA:
         return self.GBA[selected_subspace]
 
     def update_degraded_subspaces(self, selected_subspace):
+        self.S.clear()
         for subspace in self.GBA.values():
             if selected_subspace.strong_subspace_dominance(subspace):
                 self.S.add(subspace)
@@ -119,7 +140,7 @@ class AGMOEA:
             parent1 = random.choice(selected_subspace.solutions).values
         parents = []
         if len(self.EXA) < 3:
-            parents = random.sample(self.EXA, len(self.EXA)).values
+            parents = [parent.values for parent in random.sample(self.EXA, len(self.EXA))]
         else:
             parents = [parent.values for parent in random.sample(self.EXA, 3)]
         parents.insert(0, parent1)
@@ -151,7 +172,10 @@ class AGMOEA:
         
         offsprings = []
         for value in values:
+            if np.random.rand() < 1:
+                value = self.polynomial_mutation_chromosome(value)
             offspring = Chromosome(value)
+            np.clip(value, self.lower_bounds, self.upper_bounds, out=value)
             offspring.crossover_type = selected_operator
             offspring.objectives = self.evaluate_individual(offspring)
             offsprings.append(offspring)
@@ -194,25 +218,34 @@ class AGMOEA:
     def crowding_distance(self, front):
         if not front:
             return
-        num_objectives = len(front[0].objectives)
         for solution in front:
             solution.crowding_distance = 0
-        for i in range(num_objectives):
+        for i in range(self.M):
             front.sort(key=lambda solution: solution.objectives[i])
             front[0].crowding_distance = front[-1].crowding_distance = float('inf')
             for j in range(1, len(front) - 1):
                 front[j].crowding_distance += (front[j + 1].objectives[i] - front[j - 1].objectives[i])
 
+    def manage_exa_capacity(self):
+        if len(self.EXA) > self.NEXA:
+            self.crowding_distance(self.EXA)
+            self.EXA.sort(key=lambda solution: solution.crowding_distance)
+            return self.EXA[:self.NEXA]
+        else:
+            return self.EXA
+
+    
     def agmoea_algorithm(self):
         P = self.initialize_population()
-        self.EXA.extend(self.fast_non_dominated_sort(P)[0])
+        non_dominated_solutions = self.fast_non_dominated_sort(P)[0]
+        self.EXA.extend(non_dominated_solutions)
+        self.EXA = self.manage_exa_capacity()
         self.update_operator_probabilities()
         while not self.termination_criterion():
             self.S.clear()
-            ideal_point = [min(chromosome.objectives[i] for chromosome in P) for i in range(self.M)]
-            nadir_point = [max(chromosome.objectives[i] for chromosome in P) for i in range(self.M)]
-            self.construct_subspaces(P, ideal_point, nadir_point)
-            self.improve_EXA()
+
+            self.construct_subspaces(P)
+#             self.improve_EXA()
             TP = []
 
             for _ in range(self.NP):
@@ -220,20 +253,23 @@ class AGMOEA:
                 offsprings = self.generate_offspring(selected_subspace)
                 TP += offsprings
 
-            
-            self.EXA.extend(self.fast_non_dominated_sort(TP)[0])
+            non_dominated_solutions = self.fast_non_dominated_sort(TP)[0]
+            self.Test = non_dominated_solutions
+
+            self.EXA.extend(non_dominated_solutions)
+            self.EXA = self.fast_non_dominated_sort(self.EXA)[0]
+            self.EXA = self.manage_exa_capacity()
             self.update_operator_probabilities()
-            
             P.extend(TP)
             fronts = self.fast_non_dominated_sort(P)
             flattened_fronts = [item for sublist in fronts for item in sublist]
             P = flattened_fronts[:self.NP]
 
     def termination_criterion(self):
-        if self.FETmax == self.FET:
+        if self.FETmax <= self.FET:
             return True
-        if self.FET % 1000 == 0:
-            print("so far:",self.FET)
+        if self.FET % 100 == 0:
+            print("so far: ",self.FET)
         return False
 
 

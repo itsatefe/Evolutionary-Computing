@@ -58,6 +58,8 @@ class Recombination:
 
 
     def de_rand_1(self, **kwargs):
+        if len(self.parents) < 4:
+            return self.parents
         cr = kwargs.get('cr', 1)
         f = kwargs.get('f', 0.5)
         target, a, b, c = random.sample(list(self.parents), 4)

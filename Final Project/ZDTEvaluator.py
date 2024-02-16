@@ -6,7 +6,22 @@ class ZDTEvaluator:
         self.n_var = n_var
         self.M = M  # Default is 2 because ZDT problems are typically bi-objective
         self.problem_name = problem_name
-        
+    
+    def get_bounds(self):
+        problem = get_problem(self.problem_name, n_var=self.n_var)
+        lower_bounds = problem.xl
+        upper_bounds = problem.xu
+        return lower_bounds, upper_bounds
+
+    
+    def ideal_point(self):
+        problem = get_problem(self.problem_name, n_var=self.n_var)
+        return problem.ideal_point()
+    
+    def nadir_point(self):
+        problem = get_problem(self.problem_name, n_var=self.n_var)
+        return problem.nadir_point()
+
     def evaluate(self, x):
         if hasattr(self, self.problem_name):
             return getattr(self, self.problem_name)(x)
