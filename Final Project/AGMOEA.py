@@ -4,9 +4,11 @@ import itertools
 from Recombination import Recombination
 from Chromosome import Chromosome
 from Subspace import Subspace
+from pymoo.indicators.hv import HV
+from pymoo.indicators.igd import IGD
 
 class AGMOEA:
-    def __init__(self, NP, K, NGBA, NEXA, Tmax, FETmax, evaluator, crossover_parameters, N, M):
+    def __init__(self, NP, K, NGBA, NEXA, Tmax, FETmax, evaluator, crossover_parameters, Pm, N, M):
         self.NP = NP # number of population
         self.K = K # number of intervals on each dimension
         self.NGBA = NGBA # maximum capacity for each subspace
@@ -16,7 +18,7 @@ class AGMOEA:
         self.GEXA = {}
         self.GBA = {}
         self.current_generation = 0
-        self.Pm = 1/N # mutation probability
+        self.Pm = Pm # mutation probability
         self.N = N # number of decision variables
         self.S = set()
         self.operators = ['blx_alpha', 'sbx', 'spx', 'pcx', 'de_rand_1']
@@ -29,13 +31,13 @@ class AGMOEA:
         self.FETmax = FETmax
         self.crossover_parameters = crossover_parameters
         self.lower_bounds, self.upper_bounds = self.evaluator.get_bounds()
-        self.Test = []
         self.S_EXA = set()
+        self.hypervolume_values = []
+        self.igd_values = []
         self.ideal_point = evaluator.ideal_point()
         self.nadir_point = evaluator.nadir_point()
-        
-    def set_bounds(self):
-        return self.evaluator.get_bounds()
+        self.true_pareto = evaluator.get_true_pareto()
+
     
     def initialize_population(self):
         population = []
@@ -61,9 +63,9 @@ class AGMOEA:
         all_combinations = list(itertools.product(*coordinate_ranges))
         return all_combinations
 
-    def polynomial_mutation_chromosome(self, chromosome, mutation_rate=0.1, eta_m=20):
+    def polynomial_mutation_chromosome(self, chromosome, eta_m=20):
         for i in range(len(chromosome)):
-            if random.random() < mutation_rate:
+            if random.random() < self.Pm:
                 gene = chromosome[i]
                 delta_1 = (gene - self.lower_bounds[i]) / (self.upper_bounds[i] - self.lower_bounds[i])
                 delta_2 = (self.upper_bounds[i] - gene) / (self.upper_bounds[i] - self.lower_bounds[i])
@@ -90,7 +92,22 @@ class AGMOEA:
             grid_coordinates = np.floor(relative_position / grid_intervals).astype(int)
             grid_coordinates = np.clip(grid_coordinates, 0, self.K - 1)
             self.GEXA[tuple(grid_coordinates)].solutions.append(solution)
-    
+        selected_subspace = self.select_subspace_EXA()
+        parents = self.parent_selection(selected_subspace)
+        recombination = Recombination(parents, self.crossover_parameters)
+        values = recombination.sbx()
+        offsprings = []
+        for value in values[:1]:
+            if np.random.rand() < 1:
+                value = self.polynomial_mutation_chromosome(value)
+            offspring = Chromosome(value)
+            np.clip(value, self.lower_bounds, self.upper_bounds, out=value)
+            offspring.crossover_type = "sbx"
+            offspring.objectives = self.evaluate_individual(offspring)
+            offsprings.append(offspring)
+        self.EXA.extend(offsprings)
+        self.EXA = self.fast_non_dominated_sort(self.EXA)[0]
+        
     
     def select_subspace_EXA(self):
         epsilon = 1e-6
@@ -100,7 +117,7 @@ class AGMOEA:
         normalized_probabilities = {k: (v / total) for k, v in probabilities.items()}
         selected_subspace = random.choices(list(normalized_probabilities.keys()), weights=normalized_probabilities.values(), k=1)[0]
         for subspace in self.GEXA.values():
-            if selected_subspace.strong_subspace_dominance(subspace):
+            if self.GEXA[selected_subspace].strong_subspace_dominance(subspace):
                 self.S_EXA.add(subspace)
         return self.GEXA[selected_subspace]
 
@@ -169,21 +186,22 @@ class AGMOEA:
         selected_operator = recombination.select_crossover_operator(self.operator_probabilities.items())
         values = recombination.execute_crossover(selected_operator)
         
-        
         offsprings = []
-        for value in values:
+        for value in values[:1]:
             if np.random.rand() < 1:
                 value = self.polynomial_mutation_chromosome(value)
             offspring = Chromosome(value)
             np.clip(value, self.lower_bounds, self.upper_bounds, out=value)
             offspring.crossover_type = selected_operator
+            self.FET += 1
+            
             offspring.objectives = self.evaluate_individual(offspring)
             offsprings.append(offspring)
         return offsprings
 
   
     def evaluate_individual(self, chromosome):
-        self.FET += 1
+#         print(self.FET)
         return self.evaluator.evaluate(chromosome.values)
         
 
@@ -234,8 +252,17 @@ class AGMOEA:
         else:
             return self.EXA
 
+    def calculate_hypervolume(self, pareto_objectives):
+        ind = HV(ref_point=self.nadir_point)
+        return ind(pareto_objectives)
+
+    def calculate_igd(self, pareto_objectives):
+        A = np.array(self.true_pareto)
+        ind = IGD(A)
+        return ind(pareto_objectives)
     
     def agmoea_algorithm(self):
+        self.correct_pareto_front()
         P = self.initialize_population()
         non_dominated_solutions = self.fast_non_dominated_sort(P)[0]
         self.EXA.extend(non_dominated_solutions)
@@ -245,33 +272,68 @@ class AGMOEA:
             self.S.clear()
 
             self.construct_subspaces(P)
-#             self.improve_EXA()
+            self.improve_EXA()
             TP = []
-
+            
             for _ in range(self.NP):
                 selected_subspace = self.select_subspace()
                 offsprings = self.generate_offspring(selected_subspace)
                 TP += offsprings
-
             non_dominated_solutions = self.fast_non_dominated_sort(TP)[0]
-            self.Test = non_dominated_solutions
-
             self.EXA.extend(non_dominated_solutions)
             self.EXA = self.fast_non_dominated_sort(self.EXA)[0]
             self.EXA = self.manage_exa_capacity()
+            
+            pareto_objectives = np.array([list(chromosome.objectives) for chromosome in self.EXA])
+            hypervolume = self.calculate_hypervolume(pareto_objectives)
+            self.hypervolume_values.append(hypervolume)
+            igd = self.calculate_igd(pareto_objectives)
+            self.igd_values.append(igd)
+            
             self.update_operator_probabilities()
             P.extend(TP)
-            fronts = self.fast_non_dominated_sort(P)
-            flattened_fronts = [item for sublist in fronts for item in sublist]
-            P = flattened_fronts[:self.NP]
+        
+            P = self.environmental_selection(P)
+           
+    
+    def environmental_selection(self, population):
+        remaining_pop_size = self.NP
+        new_population = []
+        front_0 = []
+        fronts = self.fast_non_dominated_sort(population)
+        for i, front in enumerate(fronts):
+            front_size = len(front)
+            if remaining_pop_size > front_size:
+                new_population += front
+                remaining_pop_size -= front_size
+                
+            else:
+                self.crowding_distance(front)
+                front.sort(key=lambda chromosome: chromosome.crowding_distance, reverse=True)
+                new_population += front[:remaining_pop_size]
+                
+                break
+        return new_population
+
 
     def termination_criterion(self):
         if self.FETmax <= self.FET:
             return True
-        if self.FET % 100 == 0:
-            print("so far: ",self.FET)
+#         if self.FET % 5000 == 0:
+#             print("so far: ",self.FET)
         return False
 
+    def correct_pareto_front(self):
+        tf = []
+        for objectives in self.true_pareto:
+            chromosome = self.create_chromosome(objectives)
+            tf.append(chromosome)
+        tpf = self.fast_non_dominated_sort(tf)[0]
+        self.true_pareto = np.array([list(obj.objectives) for obj in tpf])
 
-
-
+        
+    def create_chromosome(self, objectives):
+        values = [1] * self.N
+        chromosome = Chromosome(values)
+        chromosome.objectives = objectives
+        return chromosome

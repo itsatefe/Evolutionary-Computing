@@ -1,44 +1,32 @@
 import numpy as np
 from pymoo.problems import get_problem
+from pymoo.util.ref_dirs import get_reference_directions
+
 
 class DTLZEvaluator:
-    def __init__(self, problem_name, n_var, M):
+    def __init__(self, problem_name, n_var, M=3, n_partitions = 12):
         self.n_var = n_var
         self.M = M
         self.problem_name = problem_name
-      
+        self.n_partitions = n_partitions
+        self.problem = self.get_dtlz_problem()
+        
+    def get_dtlz_problem(self):
+        ref_dirs = get_reference_directions("das-dennis", self.M, n_partitions = self.n_partitions)
+        return get_problem(self.problem_name)
+    
     def evaluate(self, x):
-        if hasattr(self, self.problem_name):
-            return getattr(self, self.problem_name)(x)
-        else:
-            raise ValueError(f"Problem {self.problem_name} is not defined.")
-            
+        return self.problem.evaluate(x)
+
+    def get_true_pareto(self):
+        
+        return self.problem.pareto_front()
+    
     def get_bounds(self):
-        return [(0, 1) for _ in range(self.n_var)]
-    def dtlz1(self, x):
-        problem = get_problem("dtlz1", n_var=self.n_var, n_obj=self.M)
-        return problem.evaluate(x)
-
-    def dtlz2(self, x):
-        problem = get_problem("dtlz2", n_var=self.n_var, n_obj=self.M)
-        return problem.evaluate(x)
-
-    def dtlz3(self, x):
-        problem = get_problem("dtlz3", n_var=self.n_var, n_obj=self.M)
-        return problem.evaluate(x)
-
-    def dtlz4(self, x):
-        problem = get_problem("dtlz4", n_var=self.n_var, n_obj=self.M)
-        return problem.evaluate(x)
-
-    def dtlz5(self, x):
-        problem = get_problem("dtlz5", n_var=self.n_var, n_obj=self.M)
-        return problem.evaluate(x)
-
-    def dtlz6(self, x):
-        problem = get_problem("dtlz6", n_var=self.n_var, n_obj=self.M)
-        return problem.evaluate(x)
-
-    def dtlz7(self, x):
-        problem = get_problem("dtlz7", n_var=self.n_var, n_obj=self.M)
-        return problem.evaluate(x)
+        return self.problem.xl, self.problem.xu
+    
+    def ideal_point(self):
+        return self.problem.ideal_point()
+    
+    def nadir_point(self):
+        return self.problem.nadir_point()
