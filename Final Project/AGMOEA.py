@@ -84,7 +84,6 @@ class AGMOEA:
         return chromosome
 
 
-
     
     def improve_EXA(self):
         grid_intervals = (np.array(self.nadir_point) - np.array(self.ideal_point)) / self.K
@@ -190,7 +189,7 @@ class AGMOEA:
 #         print(selected_operator)
         offsprings = []
         for value in values[:min(2, len(values))]:
-#             np.clip(value, self.lower_bounds, self.upper_bounds, out=value)s
+#             np.clip(value, self.lower_bounds, self.upper_bounds, out=value)
             
             if np.random.rand() < 1:
                 value = self.polynomial_mutation(value)
