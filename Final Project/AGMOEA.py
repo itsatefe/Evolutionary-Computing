@@ -63,7 +63,7 @@ class AGMOEA:
         all_combinations = list(itertools.product(*coordinate_ranges))
         return all_combinations
 
-    def polynomial_mutation_chromosome(self, chromosome, eta_m=20):
+    def polynomial_mutation(self, chromosome, eta_m=20):
         for i in range(len(chromosome)):
             if random.random() < self.Pm:
                 gene = chromosome[i]
@@ -83,6 +83,8 @@ class AGMOEA:
                 chromosome[i] = min(max(gene, self.lower_bounds[i]), self.upper_bounds[i])
         return chromosome
 
+
+
     
     def improve_EXA(self):
         grid_intervals = (np.array(self.nadir_point) - np.array(self.ideal_point)) / self.K
@@ -97,9 +99,9 @@ class AGMOEA:
         recombination = Recombination(parents, self.crossover_parameters)
         values = recombination.sbx()
         offsprings = []
-        for value in values[:1]:
+        for value in values[:2]:
             if np.random.rand() < 1:
-                value = self.polynomial_mutation_chromosome(value)
+                value = self.polynomial_mutation(value)
             offspring = Chromosome(value)
             np.clip(value, self.lower_bounds, self.upper_bounds, out=value)
             offspring.crossover_type = "sbx"
@@ -136,7 +138,7 @@ class AGMOEA:
         return self.GBA[selected_subspace]
 
     def update_degraded_subspaces(self, selected_subspace):
-        self.S.clear()
+#         self.S.clear()
         for subspace in self.GBA.values():
             if selected_subspace.strong_subspace_dominance(subspace):
                 self.S.add(subspace)
@@ -185,11 +187,13 @@ class AGMOEA:
         recombination = Recombination(parents, self.crossover_parameters)
         selected_operator = recombination.select_crossover_operator(self.operator_probabilities.items())
         values = recombination.execute_crossover(selected_operator)
-        
+#         print(selected_operator)
         offsprings = []
-        for value in values[:1]:
+        for value in values[:min(2, len(values))]:
+#             np.clip(value, self.lower_bounds, self.upper_bounds, out=value)s
+            
             if np.random.rand() < 1:
-                value = self.polynomial_mutation_chromosome(value)
+                value = self.polynomial_mutation(value)
             offspring = Chromosome(value)
             np.clip(value, self.lower_bounds, self.upper_bounds, out=value)
             offspring.crossover_type = selected_operator
@@ -270,7 +274,6 @@ class AGMOEA:
         self.update_operator_probabilities()
         while not self.termination_criterion():
             self.S.clear()
-
             self.construct_subspaces(P)
             self.improve_EXA()
             TP = []
@@ -279,8 +282,13 @@ class AGMOEA:
                 selected_subspace = self.select_subspace()
                 offsprings = self.generate_offspring(selected_subspace)
                 TP += offsprings
+                
             non_dominated_solutions = self.fast_non_dominated_sort(TP)[0]
-            self.EXA.extend(non_dominated_solutions)
+            for solution in non_dominated_solutions:
+                is_already_present = any((element.objectives == solution.objectives).all() for element in self.EXA)
+                if not is_already_present:
+                    self.EXA.append(solution)
+
             self.EXA = self.fast_non_dominated_sort(self.EXA)[0]
             self.EXA = self.manage_exa_capacity()
             

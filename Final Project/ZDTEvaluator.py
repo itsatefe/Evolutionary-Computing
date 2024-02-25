@@ -6,7 +6,7 @@ class ZDTEvaluator:
         self.n_var = n_var
         self.M = M
         self.problem_name = problem_name
-        self.problem = get_problem(problem_name, n_var=n_var)
+        self.problem = get_problem(problem_name)
   
     def evaluate(self, x):
         return self.problem.evaluate(x)

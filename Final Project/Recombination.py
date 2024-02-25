@@ -9,8 +9,10 @@ class Recombination:
                            'blx_alpha': self.blx_alpha, 'de_rand_1': self.de_rand_1}
         self.parameters = parameters
 
+    # depending on eta, the childern can be like their parent
+    # higher eta, higher similarities
     def sbx(self, **kwargs):
-        eta = kwargs.get('eta', 30)
+        eta = kwargs.get('eta', 20)
         parent1, parent2 = self.parents[0], self.parents[1]
         u = np.random.rand(len(parent1))
         beta = np.empty_like(u)
@@ -22,17 +24,36 @@ class Recombination:
         return offsprings
 
 
-    def pcx(self, **kwargs):
-        sigma = kwargs.get('sigma', 0.1)
-        eta = kwargs.get('eta', 0.1)
-        parents = self.parents[:2]
-        center_of_mass = np.mean(parents, axis=0)
-        target_parent = parents[np.random.randint(len(parents))]
-        direction_vector = target_parent - center_of_mass
-        orthogonal_component = np.random.randn(*target_parent.shape) * sigma
-        offspring = target_parent + eta * direction_vector + orthogonal_component
-        return [offspring]
 
+    def pcx(self, **kwargs):
+        sigma_s = kwargs.get('sigma_s', 0.1)
+        sigma_eta = kwargs.get('sigma_eta', 0.1)
+        num_parents = len(self.parents)
+        p_idx = np.random.choice(num_parents)
+        parent_p = self.parents[p_idx]
+        centroid = np.mean(np.delete(self.parents, p_idx, axis=0), axis=0)
+        d_p = centroid - parent_p
+        offspring = np.copy(parent_p)
+
+        # Compute the weighted direction vector term w_s * d^(p)
+        # w_s is sampled from a Gaussian distribution with mean 0 and a certain standard deviation
+        w_s = np.random.normal(0, sigma_s)
+        offspring += w_s * d_p
+
+        # Add the summation term to the offspring
+        # For each parent i (except for parent p), compute w_n * D^(i) and add to offspring
+        for i in range(num_parents):
+            if i != p_idx:
+                # Compute D^(i), the difference between parent i and the centroid of all parents excluding i
+                centroid_i = np.mean(np.delete(self.parents, i, axis=0), axis=0)
+                D_i = centroid_i - self.parents[i]
+
+                # Compute the weighted D^(i) term w_n * D^(i)
+                # w_n is sampled from a Gaussian distribution with mean 0 and a certain standard deviation
+                w_n = np.random.normal(0, sigma_eta)
+                offspring += w_n * D_i
+
+        return [offspring]
 
     def spx(self, **kwargs):
         epsilon = kwargs.get('epsilon', 1.0)
@@ -65,7 +86,7 @@ class Recombination:
         target, a, b, c = random.sample(list(self.parents), 4)
         size = len(target)
         jrand = np.random.randint(size)
-        offspring = np.array(target)
+        offspring = np.copy(target)
         for j in range(size):
             if np.random.rand() < cr or j == jrand:
                 offspring[j] = a[j] + f * (b[j] - c[j])
