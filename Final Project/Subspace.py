@@ -49,4 +49,18 @@ class Subspace:
         solutions_sws = [self.calculate_sws(x) for x in self.solutions]
         min_index = np.argmin(solutions_sws)
         return self.solutions[min_index]
+    
+    def subspace_capacity(self, NGBA):
+        if len(self.solutions) > NGBA:
+            solutions_sws = [(self.calculate_sws(solution), solution) for solution in self.solutions]
+            solutions_sws.sort(reverse=True, key=lambda x: x[0])
+            while len(self.solutions) > NGBA:
+                self.solutions.remove(solutions_sws[0][1])
+                solutions_sws.pop(0)
+
+            
+                
+                
+        
+        
 

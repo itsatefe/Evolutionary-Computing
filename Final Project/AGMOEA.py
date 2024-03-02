@@ -49,6 +49,9 @@ class AGMOEA:
         return population
 
     def construct_subspaces(self, solutions):
+        solutions_objectives = [solution.objectives for solution in solutions]
+        self.nadir_point = [max(column) for column in zip(*solutions_objectives)]
+        self.ideal_point = [min(column) for column in zip(*solutions_objectives)]
         grid_intervals = (np.array(self.nadir_point) - np.array(self.ideal_point)) / self.K
         self.GBA = {tuple(i): Subspace(coordinates=i, ideal_point=self.ideal_point, grid_intervals=grid_intervals) for i in self.generate_grid_coordinates()}
         for solution in solutions:
@@ -147,6 +150,8 @@ class AGMOEA:
         pRE = pre / (1.0 + np.exp(-20 * ((self.current_generation / self.Tmax) - 0.25)))
         return pRE + 0.1
     
+    
+    # something is wrong here
     def parent_selection(self, selected_subspace):
         parent1 = None
         if random.random() < self.adaptive_selection_probability() or not selected_subspace.solutions :
@@ -197,8 +202,9 @@ class AGMOEA:
             np.clip(value, self.lower_bounds, self.upper_bounds, out=value)
             offspring.crossover_type = selected_operator
             self.FET += 1
-            
             offspring.objectives = self.evaluate_individual(offspring)
+            offspring = self.assign_subspace(offspring)
+            
             offsprings.append(offspring)
         return offsprings
 
@@ -255,6 +261,14 @@ class AGMOEA:
         else:
             return self.EXA
 
+    def assign_subspace(self, offspring):
+        grid_intervals = (np.array(self.nadir_point) - np.array(self.ideal_point)) / self.K
+        relative_position = np.array(offspring.objectives) - np.array(self.ideal_point)
+        grid_coordinates = np.floor(relative_position / grid_intervals).astype(int)
+        grid_coordinates = np.clip(grid_coordinates, 0, self.K - 1)
+        self.GBA[tuple(grid_coordinates)].solutions.append(offspring)
+        return offspring
+    
     def calculate_hypervolume(self, pareto_objectives):
         ind = HV(ref_point=self.nadir_point)
         return ind(pareto_objectives)
@@ -281,7 +295,11 @@ class AGMOEA:
                 selected_subspace = self.select_subspace()
                 offsprings = self.generate_offspring(selected_subspace)
                 TP += offsprings
-                
+                for subspace in self.GBA:
+                    self.GBA[tuple(subspace)].subspace_capacity(self.NGBA)
+            
+            self.current_generation += 1
+            
             non_dominated_solutions = self.fast_non_dominated_sort(TP)[0]
             for solution in non_dominated_solutions:
                 is_already_present = any((element.objectives == solution.objectives).all() for element in self.EXA)
